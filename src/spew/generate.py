@@ -26,18 +26,26 @@ OPERATORS = [
 
 class Context:
     depth: int
+    in_loop: bool
     max_depth: int = MAX_DEPTH
     width: int = DEFAULT_WIDTH
 
     def __init__(self):
         self.depth = 0
         self.width = DEFAULT_WIDTH
+        self.in_loop = False
 
     @contextmanager
     def nested(self):
         self.depth += 1
         yield
         self.depth -= 1
+
+    @contextmanager
+    def inloop(self):
+        self.in_loop = True
+        yield
+        self.in_loop = False
 
 
 def randbool(ctx: Context) -> bool:
