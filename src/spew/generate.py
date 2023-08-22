@@ -27,6 +27,7 @@ OPERATORS = [
 class Context:
     depth: int
     in_loop: bool
+    names: list[str]
     max_depth: int = MAX_DEPTH
     width: int = DEFAULT_WIDTH
 
@@ -34,6 +35,7 @@ class Context:
         self.depth = 0
         self.width = DEFAULT_WIDTH
         self.in_loop = False
+        self.names = []
 
     @contextmanager
     def nested(self):
@@ -68,7 +70,7 @@ def randint(ctx: Context, a: int, b: int) -> int:
 
 def generate_arg(ctx: Context) -> ast.arg:
     arg = ast.arg()
-    arg.arg = make_name(ctx)
+    arg.arg = make_name(ctx, new=True)
     # arg.annotation = None # TODO: Randomly assign annotations
     # TODO: Set defaults?
     return arg
@@ -81,7 +83,7 @@ def generate_function(ctx: Context) -> ast.FunctionDef:
     f.args.posonlyargs = []
     f.args.kwonlyargs = []
     f.args.defaults = []
-    f.name = make_name(ctx)
+    f.name = make_name(ctx, new=True)
     with ctx.nested():
         f.body = generate_stmts(ctx)
     f.decorator_list = []
@@ -96,7 +98,7 @@ def generate_asyncfunction(ctx: Context) -> ast.AsyncFunctionDef:
     f.args.posonlyargs = []
     f.args.kwonlyargs = []
     f.args.defaults = []
-    f.name = make_name(ctx)
+    f.name = make_name(ctx, new=True)
     with ctx.nested():
         f.body = generate_stmts(ctx)
     f.decorator_list = []
@@ -123,7 +125,9 @@ def generate_continue(ctx: Context) -> ast.Continue:
 def generate_assign(ctx: Context) -> ast.Assign:
     asgn = ast.Assign()
     asgn.lineno = 1
-    asgn.targets = [generate_name(ctx)]  # TODO: vary number of assignment targets
+    asgn.targets = [
+        generate_name(ctx, new=True)
+    ]  # TODO: vary number of assignment targets
     asgn.value = generate_expr(ctx)
     return asgn
 
@@ -131,7 +135,7 @@ def generate_assign(ctx: Context) -> ast.Assign:
 def generate_augassign(ctx: Context) -> ast.AugAssign:
     asgn = ast.AugAssign()
     asgn.lineno = 1
-    asgn.target = generate_name(ctx)
+    asgn.target = generate_name(ctx, new=True)
     asgn.value = generate_expr(ctx)
     asgn.op = randchoice(ctx, OPERATORS)()
     return asgn
@@ -140,7 +144,7 @@ def generate_augassign(ctx: Context) -> ast.AugAssign:
 def generate_annassign(ctx: Context) -> ast.AnnAssign:
     asgn = ast.AnnAssign()
     asgn.lineno = 1
-    asgn.target = generate_name(ctx)
+    asgn.target = generate_name(ctx, new=True)
     asgn.value = generate_expr(ctx)
     asgn.simple = 1  # TODO : Work out what this is
     asgn.annotation = generate_expr(ctx)
@@ -154,7 +158,7 @@ def generate_import(ctx: Context) -> ast.Import:
         alias = ast.alias()
         alias.name = make_name(ctx)
         if randbool(ctx):
-            alias.asname = make_name(ctx)
+            alias.asname = make_name(ctx, new=True)
 
         im.names.append(alias)
     return im
@@ -168,15 +172,15 @@ def generate_importfrom(ctx: Context) -> ast.ImportFrom:
         alias = ast.alias()
         alias.name = make_name(ctx)
         if randbool(ctx):
-            alias.asname = make_name(ctx)
+            alias.asname = make_name(ctx, new=True)
 
         im.names.append(alias)
     return im
 
 
-def generate_name(ctx: Context) -> ast.Name:
+def generate_name(ctx: Context, new: bool = False) -> ast.Name:
     name = ast.Name()
-    name.id = make_name(ctx)
+    name.id = make_name(ctx, new=new)
     # TODO: Add type info
     return name
 
@@ -224,7 +228,7 @@ def generate_nonlocal(ctx: Context) -> ast.Nonlocal:
 
 def generate_for(ctx: Context) -> ast.For:
     f = ast.For()
-    f.target = generate_name(ctx)  # Can be expr, but just doing name
+    f.target = generate_name(ctx, new=True)  # Can be expr, but just doing name
     f.iter = generate_expr(ctx)
     f.lineno = 1
     with ctx.nested():
@@ -239,7 +243,7 @@ def generate_for(ctx: Context) -> ast.For:
 
 def generate_asyncfor(ctx: Context) -> ast.AsyncFor:
     f = ast.AsyncFor()
-    f.target = generate_name(ctx)
+    f.target = generate_name(ctx, new=True)
     f.iter = generate_expr(ctx)
     f.lineno = 1
     with ctx.nested():
@@ -289,7 +293,7 @@ def generate_with(ctx: Context) -> ast.With:
         withitem.context_expr = generate_expr(ctx)
         if randbool(ctx):
             withitem.optional_vars = generate_name(
-                ctx
+                ctx, new=True
             )  # TODO : Can be expr, but just doing name
         w.items.append(withitem)
     with ctx.nested():
@@ -306,7 +310,7 @@ def generate_asyncwith(ctx: Context) -> ast.AsyncWith:
         withitem.context_expr = generate_expr(ctx)
         if randbool(ctx):
             withitem.optional_vars = generate_name(
-                ctx
+                ctx, new=True
             )  # TODO : Can be expr, but just doing name
         w.items.append(withitem)
     with ctx.nested():
@@ -339,7 +343,7 @@ def generate_try(ctx: Context) -> ast.Try:
         handler.lineno = 1
         handler.type = generate_expr(ctx)
         if randbool(ctx):
-            handler.name = make_name(ctx)
+            handler.name = make_name(ctx, new=True)
         with ctx.nested():
             handler.body = generate_stmts(ctx)
         t.handlers.append(handler)
@@ -361,7 +365,7 @@ def generate_literal_pattern(ctx: Context) -> ast.Constant:
 
 
 def generate_capture_pattern(ctx: Context) -> ast.Name:
-    name = generate_name(ctx)  # Must not start with _ but doesnt anyway
+    name = generate_name(ctx, new=True)  # Must not start with _ but doesnt anyway
     return name
 
 
@@ -373,8 +377,8 @@ def generate_wildcard_pattern(ctx: Context) -> ast.Name:
 
 def generate_value_pattern(ctx: Context) -> ast.Name:
     name = ast.Name()
-    name1 = make_name(ctx)
-    name2 = make_name(ctx)
+    name1 = make_name(ctx, new=True)
+    name2 = make_name(ctx, new=True)
     name.id = f"{name1}.{name2}"  # TODO : Vary length and depth
     return name
 
@@ -476,7 +480,7 @@ def generate_matchas(ctx: Context) -> ast.MatchAs:
     if randbool(ctx):
         m.pattern = randchoice(ctx, CLOSED_PATTERNS)(ctx)
     if randbool(ctx):
-        m.name = make_name(ctx)
+        m.name = make_name(ctx, new=True)
     return m
 
 
