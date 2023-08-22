@@ -2,6 +2,8 @@
 
 A tool for generating random, syntactically-correct Python code. Designed for fuzzing and testing of tools that parse Python code.
 
+Designed for Python 3.10 and above, this is for testing the latest syntax. 
+
 Supports:
 
 - Functions
