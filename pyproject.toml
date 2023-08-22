@@ -16,3 +16,10 @@ test = [
     "pytest",
     "pytest-repeat",
 ]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--count=10"
+testpaths = [
+    "tests",
+]
