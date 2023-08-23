@@ -12,8 +12,8 @@ Supports:
 - All constant expressions
 - Match statements
 Not yet implemented:
-- Classes and methods
 - Many expression types
+- Decorators
 
 ## Usage
 

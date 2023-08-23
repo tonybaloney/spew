@@ -38,6 +38,14 @@ def test_generate_asyncfunction(ctx):
     assert compiles(code)
 
 
+def test_generate_class(ctx):
+    ctx.max_depth = 1
+    class_ = g.generate_class(ctx)
+    assert class_
+    code = ast.unparse(class_)
+    assert compiles(code)
+
+
 def test_generate_ellipsis(ctx):
     ellipsis = g.generate_ellipsis(ctx)
     assert ellipsis
@@ -274,3 +282,66 @@ def test_generate_match(ctx):
     assert match
     code = ast.unparse(match)
     assert compiles(code), match
+
+
+def test_generate_list(ctx):
+    list_ = g.generate_list(ctx)
+    assert list_
+    code = ast.unparse(list_)
+    assert compiles(code)
+
+
+def test_generate_tuple(ctx):
+    tuple_ = g.generate_tuple(ctx)
+    assert tuple_
+    code = ast.unparse(tuple_)
+    assert compiles(code)
+
+
+def test_generate_boolop(ctx):
+    boolop = g.generate_boolop(ctx)
+    assert boolop
+    code = ast.unparse(boolop)
+    assert compiles(code)
+
+
+def test_generate_binop(ctx):
+    binop = g.generate_binop(ctx)
+    assert binop
+    code = ast.unparse(binop)
+    assert compiles(code)
+
+
+def test_generate_unaryop(ctx):
+    unaryop = g.generate_unaryop(ctx)
+    assert unaryop
+    code = ast.unparse(unaryop)
+    assert compiles(code)
+
+
+def test_generate_lambda(ctx):
+    lambda_ = g.generate_lambda(ctx)
+    assert lambda_
+    code = ast.unparse(lambda_)
+    assert compiles(code)
+
+
+def test_generate_ifexp(ctx):
+    ifexp = g.generate_ifexp(ctx)
+    assert ifexp
+    code = ast.unparse(ifexp)
+    assert compiles(code)
+
+
+def test_generate_dict(ctx):
+    dict_ = g.generate_dict(ctx)
+    assert dict_
+    code = ast.unparse(dict_)
+    assert compiles(code)
+
+
+def test_generate_set(ctx):
+    set_ = g.generate_set(ctx)
+    assert set_
+    code = ast.unparse(set_)
+    assert compiles(code)

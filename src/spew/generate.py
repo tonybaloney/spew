@@ -101,9 +101,21 @@ def generate_asyncfunction(ctx: Context) -> ast.AsyncFunctionDef:
     f.name = make_name(ctx, new=True)
     with ctx.nested():
         f.body = generate_stmts(ctx)
-    f.decorator_list = []
+    f.decorator_list = []  # TODO: Add decorators
     f.lineno = 1
     return f
+
+
+def generate_class(ctx: Context) -> ast.ClassDef:
+    c = ast.ClassDef()
+    c.name = make_name(ctx, new=True)
+    c.bases = []  # TODO: Add bases
+    c.keywords = []
+    with ctx.nested():
+        c.body = generate_stmts(ctx)
+    c.decorator_list = []  # TODO : Add decorators
+    c.lineno = 1
+    return c
 
 
 def generate_ellipsis(ctx: Context) -> ast.Ellipsis:
@@ -538,8 +550,8 @@ def generate_match(ctx: Context) -> ast.Match:
 
 STMT_GENERATORS = (
     generate_function,
-    # generate_asyncfunction,
-    # generate_class,
+    generate_asyncfunction,
+    generate_class,
     generate_return,
     generate_delete,
     generate_assign,
@@ -554,7 +566,7 @@ STMT_GENERATORS = (
     generate_match,
     generate_raise,
     generate_try,
-    # generate_trystar,
+    # generate_trystar, # TODO
     generate_assert,
     generate_import,
     generate_importfrom,
@@ -564,18 +576,92 @@ STMT_GENERATORS = (
     generate_pass,
     generate_break,
     generate_continue,
-    # generate_ellipsis,
+    # generate_ellipsis, # This causes chaos
 )
 
+
+def generate_list(ctx: Context) -> ast.List:
+    l = ast.List()
+    with ctx.nested():
+        l.elts = generate_exprs(ctx)
+    if randbool(ctx):
+        l.ctx = randchoice(ctx, [ast.Load, ast.Store, ast.Del])()
+    return l
+
+
+def generate_tuple(ctx: Context) -> ast.Tuple:
+    t = ast.Tuple()
+    with ctx.nested():
+        t.elts = generate_exprs(ctx)
+    return t
+
+
+def generate_boolop(ctx: Context) -> ast.BoolOp:
+    b = ast.BoolOp()
+    b.values = [generate_expr(ctx)]  # TODO Vary length
+    b.op = randchoice(ctx, [ast.And, ast.Or])()
+    return b
+
+
+def generate_binop(ctx: Context) -> ast.BinOp:
+    b = ast.BinOp()
+    b.left = generate_expr(ctx)
+    b.right = generate_expr(ctx)
+    b.op = randchoice(ctx, OPERATORS)()
+    return b
+
+
+def generate_unaryop(ctx: Context) -> ast.UnaryOp:
+    u = ast.UnaryOp()
+    u.operand = generate_expr(ctx)
+    u.op = randchoice(ctx, [ast.Invert, ast.Not, ast.UAdd, ast.USub])()
+    return u
+
+
+def generate_lambda(ctx: Context) -> ast.Lambda:
+    l = ast.Lambda()
+    l.args = ast.arguments()
+    l.args.args = [generate_arg(ctx) for _ in range(randint(ctx, 0, 10))]
+    l.args.posonlyargs = []
+    l.args.kwonlyargs = []
+    l.args.defaults = []
+    with ctx.nested():
+        l.body = generate_expr(ctx)
+    return l
+
+
+def generate_ifexp(ctx: Context) -> ast.IfExp:
+    i = ast.IfExp()
+    i.test = generate_expr(ctx)
+    i.body = generate_expr(ctx)
+    i.orelse = generate_expr(ctx)
+    return i
+
+
+def generate_dict(ctx: Context) -> ast.Dict:
+    d = ast.Dict()
+    with ctx.nested():
+        d.keys = generate_exprs(ctx)
+        d.values = generate_exprs(ctx)
+    return d
+
+
+def generate_set(ctx: Context) -> ast.Set:
+    s = ast.Set()
+    with ctx.nested():
+        s.elts = generate_exprs(ctx)
+    return s
+
+
 EXPR_GENERATORS = (
-    # generate_boolop,
+    generate_boolop,
     # generate_namedexpr,
-    # generate_binop,
-    # generate_unaryop,
-    # generate_lambda,
-    # generate_ifexp,
-    # generate_dict,
-    # generate_set,
+    generate_binop,
+    generate_unaryop,
+    generate_lambda,
+    generate_ifexp,
+    generate_dict,
+    generate_set,
     # generate_listcomp,
     # generate_setcomp,
     # generate_dictcomp,
@@ -592,8 +678,8 @@ EXPR_GENERATORS = (
     # generate_subscript,
     # generate_starred,
     generate_name,
-    # generate_list,
-    # generate_tuple,
+    generate_list,
+    generate_tuple,
     # generate_slice,
 )
 
@@ -607,6 +693,12 @@ def generate_stmts(ctx: Context) -> list[ast.stmt]:
 
 def generate_expr(ctx: Context) -> ast.expr:
     return randchoice(ctx, EXPR_GENERATORS)(ctx)
+
+
+def generate_exprs(ctx: Context) -> list[ast.expr]:
+    if ctx.depth >= ctx.max_depth:
+        return []
+    return [generate_expr(ctx) for _ in range(randint(ctx, 1, ctx.width))]
 
 
 def generate_module(depth: int, width: int) -> ast.Module:
