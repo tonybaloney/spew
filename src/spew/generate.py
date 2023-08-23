@@ -243,8 +243,9 @@ def generate_for(ctx: Context) -> ast.For:
     f.target = generate_name(ctx, new=True)  # Can be expr, but just doing name
     f.iter = generate_expr(ctx)
     f.lineno = 1
-    with ctx.nested():
-        f.body = generate_stmts(ctx)
+    with ctx.inloop():
+        with ctx.nested():
+            f.body = generate_stmts(ctx)
     if randbool(ctx):
         with ctx.nested():
             f.orelse = generate_stmts(ctx)
@@ -258,8 +259,9 @@ def generate_asyncfor(ctx: Context) -> ast.AsyncFor:
     f.target = generate_name(ctx, new=True)
     f.iter = generate_expr(ctx)
     f.lineno = 1
-    with ctx.nested():
-        f.body = generate_stmts(ctx)
+    with ctx.inloop():
+        with ctx.nested():
+            f.body = generate_stmts(ctx)
     if randbool(ctx):
         with ctx.nested():
             f.orelse = generate_stmts(ctx)
@@ -272,8 +274,9 @@ def generate_while(ctx: Context) -> ast.While:
     w = ast.While()
     w.test = generate_expr(ctx)
     w.lineno = 1
-    with ctx.nested():
-        w.body = generate_stmts(ctx)
+    with ctx.inloop():
+        with ctx.nested():
+            w.body = generate_stmts(ctx)
     if randbool(ctx):
         with ctx.nested():
             w.orelse = generate_stmts(ctx)
@@ -574,8 +577,8 @@ STMT_GENERATORS = (
     generate_nonlocal,
     generate_expression,
     generate_pass,
-    generate_break,
-    generate_continue,
+    # generate_break, # TODO: Only use when ctx.in_loop
+    # generate_continue, # TODO: Only use when ctx.in_loop
     # generate_ellipsis, # This causes chaos
 )
 
@@ -683,6 +686,12 @@ EXPR_GENERATORS = (
     # generate_slice,
 )
 
+""" Expressions that don't themselves contain expressions. """
+FLAT_EXPR_GENERATORS = [
+    generate_name,
+    generate_constant,
+]
+
 
 def generate_stmts(ctx: Context) -> list[ast.stmt]:
     if ctx.depth >= ctx.max_depth:
@@ -692,6 +701,8 @@ def generate_stmts(ctx: Context) -> list[ast.stmt]:
 
 
 def generate_expr(ctx: Context) -> ast.expr:
+    if ctx.depth >= ctx.max_depth:
+        return randchoice(ctx, FLAT_EXPR_GENERATORS)(ctx)
     return randchoice(ctx, EXPR_GENERATORS)(ctx)
 
 
