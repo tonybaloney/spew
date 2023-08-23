@@ -15,6 +15,14 @@ def compiles(code: str):
     return True
 
 
+@pytest.mark.parametrize("depth", [1, 2, 3, 4, 5])
+def test_nested_generate_module(depth):
+    module = g.generate_module(depth=depth, width=3)
+    assert module
+    code = ast.unparse(module)
+    assert compiles(code)
+
+
 def test_generate_arg(ctx):
     arg = g.generate_arg(ctx)
     assert arg
