@@ -417,3 +417,17 @@ def test_generate_call(ctx):
     assert call
     code = ast.unparse(call)
     assert compiles(code)
+
+
+def test_generate_formattedvalue(ctx):
+    formattedvalue = g.generate_formattedvalue(ctx)
+    assert formattedvalue
+    code = ast.unparse(formattedvalue)
+    assert code  # isn't valid syntax
+
+
+def test_generate_joinedstr(ctx):
+    joinedstr = g.generate_joinedstr(ctx)
+    assert joinedstr
+    code = ast.unparse(joinedstr)
+    assert compiles(code)

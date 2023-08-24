@@ -11,9 +11,9 @@ Supports:
 - Async With, For, FunctionDef
 - All constant expressions
 - Match statements
-Not yet implemented:
 - Many expression types
 - Decorators
+- Classes
 
 ## Usage
 

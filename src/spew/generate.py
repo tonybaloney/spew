@@ -84,6 +84,10 @@ class Context:
         self.in_function = _prev_state
 
 
+def make_text(ctx: Context) -> str:
+    return make_name(ctx, new=True)  # TODO : Do better
+
+
 def randbool(ctx: Context) -> bool:
     # TODO: Use context for reproducible results
     return _random.randint(0, 1) == 1
@@ -251,6 +255,12 @@ def generate_constant(ctx: Context, values_only=False) -> ast.Constant:
     if not values_only:
         values.append(Ellipsis)
     c.value = randchoice(ctx, values)
+    return c
+
+
+def generate_str_constant(ctx: Context) -> ast.Constant:
+    c = ast.Constant()
+    c.value = str(make_text(ctx))
     return c
 
 
@@ -778,6 +788,23 @@ def generate_call(ctx: Context) -> ast.Call:
     return c
 
 
+def generate_formattedvalue(ctx: Context) -> ast.FormattedValue:
+    f = ast.FormattedValue()
+    f.value = generate_name(ctx)
+    f.format_spec = None  # TODO : Generate format specs
+    f.conversion = -1  # TODO : Work out what this is?
+    return f
+
+
+def generate_joinedstr(ctx: Context) -> ast.JoinedStr:
+    j = ast.JoinedStr()
+    j.values = [
+        randchoice(ctx, [generate_str_constant, generate_formattedvalue])(ctx)
+        for _ in range(ctx.width)
+    ]
+    return j
+
+
 EXPR_GENERATORS = (
     generate_boolop,
     # generate_namedexpr,
@@ -796,8 +823,8 @@ EXPR_GENERATORS = (
     generate_yieldfrom,
     generate_compare,
     generate_call,
-    # generate_formattedvalue,
-    # generate_joinedstr,
+    generate_formattedvalue,
+    generate_joinedstr,
     generate_constant,
     # generate_attribute,
     # generate_subscript,
@@ -830,6 +857,7 @@ def _generate_stmts(ctx: Context) -> list[ast.stmt]:
         logger.debug("Hit max depth for stmt")
         return [generate_pass(ctx)]
     # TODO : Filter out statements that can't be in loops or functions
+    # TODO: Don't yield statement types that themselves have bodies when 1 away from the max_depth
     return [randchoice(ctx, STMT_ALL_GENERATORS)(ctx) for _ in range(ctx.width)]
 
 
