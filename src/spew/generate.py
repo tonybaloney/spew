@@ -830,7 +830,7 @@ def _generate_stmts(ctx: Context) -> list[ast.stmt]:
         logger.debug("Hit max depth for stmt")
         return [generate_pass(ctx)]
     # TODO : Filter out statements that can't be in loops or functions
-    return [randchoice(ctx, STMT_ALL_GENERATORS)(ctx)]
+    return [randchoice(ctx, STMT_ALL_GENERATORS)(ctx) for _ in range(ctx.width)]
 
 
 def generate_nested_stmts(ctx: Context) -> list[ast.stmt]:
