@@ -16,9 +16,11 @@ parser.add_argument("--log-level", type=str, default="INFO")
 args = parser.parse_args()
 
 console = Console()
-
+logger.setLevel(args.log_level)
 logger.debug("Generating module with depth %s and width %s", args.depth, args.width)
-m = spew.generate.generate_module(depth=args.depth, width=args.width)
+m = spew.generate.generate_module(
+    depth=args.depth, width=args.width, log_level=args.log_level
+)
 code = ast.unparse(m)
 syntax = Syntax(code, "python")
 console.print(syntax)

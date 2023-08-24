@@ -827,6 +827,7 @@ STMT_ALL_GENERATORS = list(map(lambda x: x[1], STMT_GENERATORS))
 
 def _generate_stmts(ctx: Context) -> list[ast.stmt]:
     if ctx.depth >= ctx.max_depth:
+        logger.debug("Hit max depth for stmt")
         return [generate_pass(ctx)]
     # TODO : Filter out statements that can't be in loops or functions
     return [randchoice(ctx, STMT_ALL_GENERATORS)(ctx)]
@@ -840,6 +841,7 @@ def generate_nested_stmts(ctx: Context) -> list[ast.stmt]:
 def generate_expr(ctx: Context) -> ast.expr:
     with ctx.nested():
         if ctx.depth >= ctx.max_depth:
+            logger.debug("Hit max depth")
             return randchoice(ctx, FLAT_EXPR_GENERATORS)(ctx)
         return randchoice(ctx, EXPR_GENERATORS)(ctx)
 
@@ -850,7 +852,9 @@ def generate_exprs(ctx: Context) -> list[ast.expr]:
     return [generate_expr(ctx) for _ in range(randint(ctx, 1, ctx.width))]
 
 
-def generate_module(depth: int, width: int) -> ast.Module:
+def generate_module(depth: int, width: int, log_level: str | None = None) -> ast.Module:
+    if log_level is not None:
+        logger.setLevel(log_level)
     ctx = Context()
     ctx.max_depth = depth
     ctx.width = width
