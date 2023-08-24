@@ -12,6 +12,7 @@ def ctx():
 
 def compiles(code: str):
     ast.parse(code)
+    # TODO: Use compileall?
     return True
 
 
@@ -352,4 +353,67 @@ def test_generate_set(ctx):
     set_ = g.generate_set(ctx)
     assert set_
     code = ast.unparse(set_)
+    assert compiles(code)
+
+
+def test_generate_listcomp(ctx):
+    listcomp = g.generate_listcomp(ctx)
+    assert listcomp
+    code = ast.unparse(listcomp)
+    assert compiles(code)
+
+
+def test_generate_setcomp(ctx):
+    setcomp = g.generate_setcomp(ctx)
+    assert setcomp
+    code = ast.unparse(setcomp)
+    assert compiles(code)
+
+
+def test_generate_dictcomp(ctx):
+    dictcomp = g.generate_dictcomp(ctx)
+    assert dictcomp
+    code = ast.unparse(dictcomp)
+    assert compiles(code)
+
+
+def test_generate_generatorexp(ctx):
+    generatorexp = g.generate_generatorexp(ctx)
+    assert generatorexp
+    code = ast.unparse(generatorexp)
+    assert compiles(code)
+
+
+def test_generate_await(ctx):
+    await_ = g.generate_await(ctx)
+    assert await_
+    code = ast.unparse(await_)
+    assert compiles(code)
+
+
+def test_generate_yield(ctx):
+    yield_ = g.generate_yield(ctx)
+    assert yield_
+    code = ast.unparse(yield_)
+    assert compiles(code)
+
+
+def test_generate_yieldfrom(ctx):
+    yieldfrom = g.generate_yieldfrom(ctx)
+    assert yieldfrom
+    code = ast.unparse(yieldfrom)
+    assert compiles(code)
+
+
+def test_generate_compare(ctx):
+    compare = g.generate_compare(ctx)
+    assert compare
+    code = ast.unparse(compare)
+    assert compiles(code)
+
+
+def test_generate_call(ctx):
+    call = g.generate_call(ctx)
+    assert call
+    code = ast.unparse(call)
     assert compiles(code)

@@ -3,9 +3,20 @@ from contextlib import contextmanager
 import random as _random
 import typing
 from spew.names import generate as make_name
+import logging
+import enum
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 MAX_DEPTH = 3
 DEFAULT_WIDTH = 20
+
+
+class GeneratorConstraints(enum.Flag):
+    ANY = enum.auto()
+    ONLY_IN_LOOPS = enum.auto()
+    ONLY_IN_FUNCTIONS = enum.auto()
+
 
 OPERATORS = [
     ast.Add,
@@ -22,6 +33,18 @@ OPERATORS = [
     ast.RShift,
     ast.Sub,
 ]
+CMPOPS = [
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.Is,
+    ast.IsNot,
+    ast.In,
+    ast.NotIn,
+]
 
 
 class Context:
@@ -35,19 +58,30 @@ class Context:
         self.depth = 0
         self.width = DEFAULT_WIDTH
         self.in_loop = False
+        self.in_function = False
         self.names = []
 
     @contextmanager
     def nested(self):
+        if self.depth + 1 > self.max_depth:
+            logger.debug("Max depth exceeded", stack_info=True)
         self.depth += 1
         yield
         self.depth -= 1
 
     @contextmanager
     def inloop(self):
+        _prev_state = self.in_loop
         self.in_loop = True
         yield
-        self.in_loop = False
+        self.in_loop = _prev_state
+
+    @contextmanager
+    def infunction(self):
+        _prev_state = self.in_function
+        self.in_function = True
+        yield
+        self.in_function = _prev_state
 
 
 def randbool(ctx: Context) -> bool:
@@ -68,42 +102,50 @@ def randint(ctx: Context, a: int, b: int) -> int:
     return _random.randint(a, b)
 
 
-def generate_arg(ctx: Context) -> ast.arg:
+def generate_arg(ctx: Context, allow_annotations=False) -> ast.arg:
     arg = ast.arg()
     arg.arg = make_name(ctx, new=True)
-    # arg.annotation = None # TODO: Randomly assign annotations
-    # TODO: Set defaults?
+    if randbool(ctx) and allow_annotations:
+        arg.annotation = generate_name(ctx)
     return arg
+
+
+TFunc = typing.TypeVar("TFunc", ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def _generate_function(f: TFunc, ctx: Context) -> TFunc:
+    f.args = ast.arguments()
+    n_args = randint(ctx, 0, ctx.width)
+    f.args.args = [generate_arg(ctx, True) for _ in range(n_args)]
+    f.args.posonlyargs = []
+    f.args.kwonlyargs = []
+    if randbool(ctx):
+        f.args.defaults = [
+            generate_constant(ctx, values_only=True) for _ in range(n_args)
+        ]
+    else:
+        f.args.defaults = []
+    f.name = make_name(ctx, new=True)
+    with ctx.infunction():
+        f.body = generate_nested_stmts(ctx)
+    if randbool(ctx):
+        f.decorator_list = []
+    else:
+        f.decorator_list = [
+            generate_expr(ctx) for _ in range(randint(ctx, 1, 3))
+        ]  # TODO: vary length
+    f.lineno = 1
+    return f
 
 
 def generate_function(ctx: Context) -> ast.FunctionDef:
     f = ast.FunctionDef()
-    f.args = ast.arguments()
-    f.args.args = [generate_arg(ctx) for _ in range(randint(ctx, 0, 10))]
-    f.args.posonlyargs = []
-    f.args.kwonlyargs = []
-    f.args.defaults = []
-    f.name = make_name(ctx, new=True)
-    with ctx.nested():
-        f.body = generate_stmts(ctx)
-    f.decorator_list = []
-    f.lineno = 1
-    return f
+    return _generate_function(f, ctx)
 
 
 def generate_asyncfunction(ctx: Context) -> ast.AsyncFunctionDef:
     f = ast.AsyncFunctionDef()
-    f.args = ast.arguments()
-    f.args.args = [generate_arg(ctx) for _ in range(randint(ctx, 0, 10))]
-    f.args.posonlyargs = []
-    f.args.kwonlyargs = []
-    f.args.defaults = []
-    f.name = make_name(ctx, new=True)
-    with ctx.nested():
-        f.body = generate_stmts(ctx)
-    f.decorator_list = []  # TODO: Add decorators
-    f.lineno = 1
-    return f
+    return _generate_function(f, ctx)
 
 
 def generate_class(ctx: Context) -> ast.ClassDef:
@@ -111,9 +153,13 @@ def generate_class(ctx: Context) -> ast.ClassDef:
     c.name = make_name(ctx, new=True)
     c.bases = []  # TODO: Add bases
     c.keywords = []
-    with ctx.nested():
-        c.body = generate_stmts(ctx)
-    c.decorator_list = []  # TODO : Add decorators
+    c.body = generate_nested_stmts(ctx)
+    if randbool(ctx):
+        c.decorator_list = []
+    else:
+        c.decorator_list = [
+            generate_expr(ctx) for _ in range(randint(ctx, 1, 3))
+        ]  # TODO: vary length
     c.lineno = 1
     return c
 
@@ -137,9 +183,12 @@ def generate_continue(ctx: Context) -> ast.Continue:
 def generate_assign(ctx: Context) -> ast.Assign:
     asgn = ast.Assign()
     asgn.lineno = 1
-    asgn.targets = [
-        generate_name(ctx, new=True)
-    ]  # TODO: vary number of assignment targets
+    if randbool(ctx):
+        asgn.targets = [generate_name(ctx, new=True)]
+    else:
+        asgn.targets = [
+            generate_name(ctx, new=True) for _ in range(randint(ctx, 1, ctx.width))
+        ]
     asgn.value = generate_expr(ctx)
     return asgn
 
@@ -166,7 +215,7 @@ def generate_annassign(ctx: Context) -> ast.AnnAssign:
 def generate_import(ctx: Context) -> ast.Import:
     im = ast.Import()
     im.names = []
-    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+    for _ in range(randint(ctx, 1, ctx.width)):
         alias = ast.alias()
         alias.name = make_name(ctx)
         if randbool(ctx):
@@ -180,7 +229,7 @@ def generate_importfrom(ctx: Context) -> ast.ImportFrom:
     im = ast.ImportFrom()
     im.module = make_name(ctx)
     im.names = []
-    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+    for _ in range(randint(ctx, 1, ctx.width)):
         alias = ast.alias()
         alias.name = make_name(ctx)
         if randbool(ctx):
@@ -193,7 +242,6 @@ def generate_importfrom(ctx: Context) -> ast.ImportFrom:
 def generate_name(ctx: Context, new: bool = False) -> ast.Name:
     name = ast.Name()
     name.id = make_name(ctx, new=new)
-    # TODO: Add type info
     return name
 
 
@@ -240,15 +288,14 @@ def generate_nonlocal(ctx: Context) -> ast.Nonlocal:
 
 def generate_for(ctx: Context) -> ast.For:
     f = ast.For()
+    # TODO : Set tuple or collection as target
     f.target = generate_name(ctx, new=True)  # Can be expr, but just doing name
     f.iter = generate_expr(ctx)
     f.lineno = 1
     with ctx.inloop():
-        with ctx.nested():
-            f.body = generate_stmts(ctx)
+        f.body = generate_nested_stmts(ctx)
     if randbool(ctx):
-        with ctx.nested():
-            f.orelse = generate_stmts(ctx)
+        f.orelse = generate_nested_stmts(ctx)
     else:
         f.orelse = []  # TODO: Raise bug report about this?
     return f
@@ -260,11 +307,9 @@ def generate_asyncfor(ctx: Context) -> ast.AsyncFor:
     f.iter = generate_expr(ctx)
     f.lineno = 1
     with ctx.inloop():
-        with ctx.nested():
-            f.body = generate_stmts(ctx)
+        f.body = generate_nested_stmts(ctx)
     if randbool(ctx):
-        with ctx.nested():
-            f.orelse = generate_stmts(ctx)
+        f.orelse = generate_nested_stmts(ctx)
     else:
         f.orelse = []
     return f
@@ -275,11 +320,9 @@ def generate_while(ctx: Context) -> ast.While:
     w.test = generate_expr(ctx)
     w.lineno = 1
     with ctx.inloop():
-        with ctx.nested():
-            w.body = generate_stmts(ctx)
+        w.body = generate_nested_stmts(ctx)
     if randbool(ctx):
-        with ctx.nested():
-            w.orelse = generate_stmts(ctx)
+        w.orelse = generate_nested_stmts(ctx)
     else:
         w.orelse = []
     return w
@@ -289,11 +332,9 @@ def generate_if(ctx: Context) -> ast.If:
     i = ast.If()
     i.test = generate_expr(ctx)
     i.lineno = 1
-    with ctx.nested():
-        i.body = generate_stmts(ctx)
+    i.body = generate_nested_stmts(ctx)
     if randbool(ctx):
-        with ctx.nested():
-            i.orelse = generate_stmts(ctx)
+        i.orelse = generate_nested_stmts(ctx)
     else:
         i.orelse = []
     return i
@@ -311,8 +352,7 @@ def generate_with(ctx: Context) -> ast.With:
                 ctx, new=True
             )  # TODO : Can be expr, but just doing name
         w.items.append(withitem)
-    with ctx.nested():
-        w.body = generate_stmts(ctx)
+    w.body = generate_nested_stmts(ctx)
     return w
 
 
@@ -328,8 +368,7 @@ def generate_asyncwith(ctx: Context) -> ast.AsyncWith:
                 ctx, new=True
             )  # TODO : Can be expr, but just doing name
         w.items.append(withitem)
-    with ctx.nested():
-        w.body = generate_stmts(ctx)
+    w.body = generate_nested_stmts(ctx)
     return w
 
 
@@ -350,8 +389,7 @@ def generate_expression(ctx: Context) -> ast.Expr:
 def generate_try(ctx: Context) -> ast.Try:
     t = ast.Try()
     t.lineno = 1
-    with ctx.nested():
-        t.body = generate_stmts(ctx)
+    t.body = generate_nested_stmts(ctx)
     t.handlers = []
     for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
         handler = ast.ExceptHandler()
@@ -359,17 +397,14 @@ def generate_try(ctx: Context) -> ast.Try:
         handler.type = generate_expr(ctx)
         if randbool(ctx):
             handler.name = make_name(ctx, new=True)
-        with ctx.nested():
-            handler.body = generate_stmts(ctx)
+        handler.body = generate_nested_stmts(ctx)
         t.handlers.append(handler)
     if randbool(ctx):
-        with ctx.nested():
-            t.orelse = generate_stmts(ctx)
+        t.orelse = generate_nested_stmts(ctx)
     else:
         t.orelse = []
     if randbool(ctx):
-        with ctx.nested():
-            t.finalbody = generate_stmts(ctx)
+        t.finalbody = generate_nested_stmts(ctx)
     else:
         t.finalbody = []
     return t
@@ -513,7 +548,7 @@ MATCH_GENERATORS = [
     generate_matchsequence,
     generate_matchmapping,
     generate_matchclass,
-    # generate_matchstar,
+    # generate_matchstar, # Causes lots of problems with syntax?
     generate_matchas,
     generate_matchor,
 ]
@@ -545,48 +580,46 @@ def generate_match(ctx: Context) -> ast.Match:
         case.pattern = generate_matchpattern(ctx)
         if randbool(ctx):
             case.guard = generate_expr(ctx)
-        with ctx.nested():
-            case.body = generate_stmts(ctx)
+        case.body = generate_nested_stmts(ctx)
         m.cases.append(case)
     return m
 
 
 STMT_GENERATORS = (
-    generate_function,
-    generate_asyncfunction,
-    generate_class,
-    generate_return,
-    generate_delete,
-    generate_assign,
-    generate_augassign,
-    generate_annassign,
-    generate_for,
-    generate_asyncfor,
-    generate_while,
-    generate_if,
-    generate_with,
-    generate_asyncwith,
-    generate_match,
-    generate_raise,
-    generate_try,
-    # generate_trystar, # TODO
-    generate_assert,
-    generate_import,
-    generate_importfrom,
-    generate_global,
-    generate_nonlocal,
-    generate_expression,
-    generate_pass,
-    # generate_break, # TODO: Only use when ctx.in_loop
-    # generate_continue, # TODO: Only use when ctx.in_loop
-    # generate_ellipsis, # This causes chaos
+    (GeneratorConstraints.ANY, generate_function),
+    (GeneratorConstraints.ANY, generate_asyncfunction),
+    (GeneratorConstraints.ANY, generate_class),
+    (GeneratorConstraints.ANY, generate_return),
+    (GeneratorConstraints.ANY, generate_delete),
+    (GeneratorConstraints.ANY, generate_assign),
+    (GeneratorConstraints.ANY, generate_augassign),
+    (GeneratorConstraints.ANY, generate_annassign),
+    (GeneratorConstraints.ANY, generate_for),
+    (GeneratorConstraints.ANY, generate_asyncfor),
+    (GeneratorConstraints.ANY, generate_while),
+    (GeneratorConstraints.ANY, generate_if),
+    (GeneratorConstraints.ANY, generate_with),
+    (GeneratorConstraints.ANY, generate_asyncwith),
+    (GeneratorConstraints.ANY, generate_match),
+    (GeneratorConstraints.ANY, generate_raise),
+    (GeneratorConstraints.ANY, generate_try),
+    # (GeneratorConstraints.ANY, generate_trystar), # TODO
+    (GeneratorConstraints.ANY, generate_assert),
+    (GeneratorConstraints.ANY, generate_import),
+    (GeneratorConstraints.ANY, generate_importfrom),
+    (GeneratorConstraints.ANY, generate_global),
+    (GeneratorConstraints.ONLY_IN_FUNCTIONS, generate_nonlocal),
+    (GeneratorConstraints.ANY, generate_expression),
+    (GeneratorConstraints.ANY, generate_pass),
+    (GeneratorConstraints.ONLY_IN_LOOPS, generate_break),
+    (GeneratorConstraints.ONLY_IN_LOOPS, generate_continue),
+    # (GeneratorConstraints.ANY, generate_ellipsis), # This causes chaos
 )
 
 
 def generate_list(ctx: Context) -> ast.List:
     l = ast.List()
-    with ctx.nested():
-        l.elts = generate_exprs(ctx)
+    l.elts = generate_exprs(ctx)
     if randbool(ctx):
         l.ctx = randchoice(ctx, [ast.Load, ast.Store, ast.Del])()
     return l
@@ -594,8 +627,7 @@ def generate_list(ctx: Context) -> ast.List:
 
 def generate_tuple(ctx: Context) -> ast.Tuple:
     t = ast.Tuple()
-    with ctx.nested():
-        t.elts = generate_exprs(ctx)
+    t.elts = generate_exprs(ctx)
     return t
 
 
@@ -628,8 +660,7 @@ def generate_lambda(ctx: Context) -> ast.Lambda:
     l.args.posonlyargs = []
     l.args.kwonlyargs = []
     l.args.defaults = []
-    with ctx.nested():
-        l.body = generate_expr(ctx)
+    l.body = generate_expr(ctx)
     return l
 
 
@@ -643,17 +674,108 @@ def generate_ifexp(ctx: Context) -> ast.IfExp:
 
 def generate_dict(ctx: Context) -> ast.Dict:
     d = ast.Dict()
-    with ctx.nested():
-        d.keys = generate_exprs(ctx)
-        d.values = generate_exprs(ctx)
+    d.keys = generate_exprs(ctx)
+    d.values = generate_exprs(ctx)
     return d
 
 
 def generate_set(ctx: Context) -> ast.Set:
     s = ast.Set()
-    with ctx.nested():
-        s.elts = generate_exprs(ctx)
+    s.elts = generate_exprs(ctx)
     return s
+
+
+def generate_comprehension(ctx: Context) -> ast.comprehension:
+    c = ast.comprehension()
+    c.target = generate_name(ctx, new=True)
+    c.iter = generate_expr(ctx)
+    c.ifs = []
+    for _ in range(randint(ctx, 0, 3)):  # TODO: Vary length
+        c.ifs.append(generate_expr(ctx))
+    c.is_async = False  # TODO: Vary?
+    return c
+
+
+def generate_listcomp(ctx: Context) -> ast.ListComp:
+    l = ast.ListComp()
+    l.elt = generate_expr(ctx)
+    l.generators = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        l.generators.append(generate_comprehension(ctx))
+    return l
+
+
+def generate_setcomp(ctx: Context) -> ast.SetComp:
+    s = ast.SetComp()
+    s.elt = generate_expr(ctx)
+    s.generators = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        s.generators.append(generate_comprehension(ctx))
+    return s
+
+
+def generate_dictcomp(ctx: Context) -> ast.DictComp:
+    d = ast.DictComp()
+    d.key = generate_expr(ctx)
+    d.value = generate_expr(ctx)
+    d.generators = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        d.generators.append(generate_comprehension(ctx))
+    return d
+
+
+def generate_generatorexp(ctx: Context) -> ast.GeneratorExp:
+    g = ast.GeneratorExp()
+    g.elt = generate_expr(ctx)
+    g.generators = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        g.generators.append(generate_comprehension(ctx))
+    return g
+
+
+def generate_await(ctx: Context) -> ast.Await:
+    a = ast.Await()
+    a.value = generate_expr(ctx)
+    return a
+
+
+def generate_yield(ctx: Context) -> ast.Yield:
+    y = ast.Yield()
+    y.value = generate_expr(ctx)
+    return y
+
+
+def generate_yieldfrom(ctx: Context) -> ast.YieldFrom:
+    y = ast.YieldFrom()
+    y.value = generate_expr(ctx)
+    return y
+
+
+def generate_compare(ctx: Context) -> ast.Compare:
+    c = ast.Compare()
+    c.left = generate_expr(ctx)
+    c.comparators = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        c.comparators.append(generate_expr(ctx))
+    c.ops = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        c.ops.append(randchoice(ctx, CMPOPS)())
+    return c
+
+
+def generate_call(ctx: Context) -> ast.Call:
+    c = ast.Call()
+    c.func = generate_expr(ctx)
+    c.args = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        c.args.append(generate_expr(ctx))
+    c.keywords = []
+    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+        kw = ast.keyword()
+        kw.arg = make_name(ctx)
+        kw.value = generate_expr(ctx)
+        c.keywords.append(kw)
+    return c
 
 
 EXPR_GENERATORS = (
@@ -665,15 +787,15 @@ EXPR_GENERATORS = (
     generate_ifexp,
     generate_dict,
     generate_set,
-    # generate_listcomp,
-    # generate_setcomp,
-    # generate_dictcomp,
-    # generate_generatorexp,
-    # generate_await,
-    # generate_yield,
-    # generate_yieldfrom,
-    # generate_compare,
-    # generate_call,
+    generate_listcomp,
+    generate_setcomp,
+    generate_dictcomp,
+    generate_generatorexp,
+    generate_await,
+    generate_yield,
+    generate_yieldfrom,
+    generate_compare,
+    generate_call,
     # generate_formattedvalue,
     # generate_joinedstr,
     generate_constant,
@@ -693,17 +815,33 @@ FLAT_EXPR_GENERATORS = [
 ]
 
 
-def generate_stmts(ctx: Context) -> list[ast.stmt]:
+# Create another list with the first item in the tuple for each item in STMT_GENERATORS
+STMT_OUTSIDE_LOOP_GENERATORS = list(
+    map(
+        lambda x: x[1],
+        filter(lambda x: x[0] == GeneratorConstraints.ANY, STMT_GENERATORS),
+    )
+)
+STMT_ALL_GENERATORS = list(map(lambda x: x[1], STMT_GENERATORS))
+
+
+def _generate_stmts(ctx: Context) -> list[ast.stmt]:
     if ctx.depth >= ctx.max_depth:
         return [generate_pass(ctx)]
+    # TODO : Filter out statements that can't be in loops or functions
+    return [randchoice(ctx, STMT_ALL_GENERATORS)(ctx)]
 
-    return [randchoice(ctx, STMT_GENERATORS)(ctx) for _ in range(ctx.width)]
+
+def generate_nested_stmts(ctx: Context) -> list[ast.stmt]:
+    with ctx.nested():
+        return _generate_stmts(ctx)
 
 
 def generate_expr(ctx: Context) -> ast.expr:
-    if ctx.depth >= ctx.max_depth:
-        return randchoice(ctx, FLAT_EXPR_GENERATORS)(ctx)
-    return randchoice(ctx, EXPR_GENERATORS)(ctx)
+    with ctx.nested():
+        if ctx.depth >= ctx.max_depth:
+            return randchoice(ctx, FLAT_EXPR_GENERATORS)(ctx)
+        return randchoice(ctx, EXPR_GENERATORS)(ctx)
 
 
 def generate_exprs(ctx: Context) -> list[ast.expr]:
@@ -718,6 +856,5 @@ def generate_module(depth: int, width: int) -> ast.Module:
     ctx.width = width
     mod = ast.Module()
     mod.type_ignores = []
-    with ctx.nested():
-        mod.body = generate_stmts(ctx)
+    mod.body = generate_nested_stmts(ctx)
     return mod
