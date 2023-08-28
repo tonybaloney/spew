@@ -666,14 +666,14 @@ def generate_match(ctx: Context) -> ast.Match:
 
 
 STMT_GENERATORS = (
+    (GeneratorConstraints.ANY, generate_assign),
+    (GeneratorConstraints.ANY, generate_augassign),
+    (GeneratorConstraints.ANY, generate_annassign),
     (GeneratorConstraints.ANY, generate_function),
     (GeneratorConstraints.ANY, generate_asyncfunction),
     (GeneratorConstraints.ANY, generate_class),
     (GeneratorConstraints.ANY, generate_return),
     (GeneratorConstraints.ANY, generate_delete),
-    (GeneratorConstraints.ANY, generate_assign),
-    (GeneratorConstraints.ANY, generate_augassign),
-    (GeneratorConstraints.ANY, generate_annassign),
     (GeneratorConstraints.ANY, generate_for),
     (GeneratorConstraints.ANY, generate_asyncfor),
     (GeneratorConstraints.ANY, generate_while),
