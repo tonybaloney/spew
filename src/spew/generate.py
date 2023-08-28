@@ -311,11 +311,7 @@ constant_values_with_ellipsis_cycle = cycle(
 
 def generate_constant(ctx: Context, values_only=False) -> ast.Constant:
     c = ast.Constant()
-    c.value = next(
-        constant_values_cycle
-        if not values_only
-        else constant_values_with_ellipsis_cycle
-    )
+    c.value = next(constant_values_cycle)
     return c
 
 
