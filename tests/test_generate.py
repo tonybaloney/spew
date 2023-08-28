@@ -1,6 +1,8 @@
 import spew.generate as g
 import ast
 import pytest
+import compileall
+import tempfile
 
 
 @pytest.fixture
@@ -12,8 +14,9 @@ def ctx():
 
 def compiles(code: str):
     ast.parse(code)
-    # TODO: Use compileall?
-    return True
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete_on_close=True) as f:
+        f.write(code)
+        return compileall.compile_file(f.name)
 
 
 @pytest.mark.parametrize("depth", [1, 2, 3, 4, 5])
@@ -225,6 +228,14 @@ def test_generate_expression(ctx):
 def test_generate_try(ctx):
     ctx.max_depth = 1
     try_ = g.generate_try(ctx)
+    assert try_
+    code = ast.unparse(try_)
+    assert compiles(code)
+
+
+def test_generate_trystar(ctx):
+    ctx.max_depth = 1
+    try_ = g.generate_trystar(ctx)
     assert try_
     code = ast.unparse(try_)
     assert compiles(code)

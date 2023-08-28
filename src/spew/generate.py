@@ -1,5 +1,6 @@
 import ast
 from contextlib import contextmanager
+from itertools import cycle
 import random as _random
 import typing
 from spew.names import generate as make_name
@@ -88,16 +89,17 @@ def make_text(ctx: Context) -> str:
     return make_name(ctx, new=True)  # TODO : Do better
 
 
+boolcycle = cycle([True, False])
+
+
 def randbool(ctx: Context) -> bool:
-    # TODO: Use context for reproducible results
-    return _random.randint(0, 1) == 1
+    return next(boolcycle)
 
 
 T = typing.TypeVar("T")
 
 
 def randchoice(ctx: Context, choices: typing.Sequence[T]) -> T:
-    # TODO: Use context for reproducible results
     return _random.choice(choices)
 
 
@@ -187,12 +189,18 @@ def generate_continue(ctx: Context) -> ast.Continue:
     return ast.Continue()
 
 
+gen_cycle = cycle([ast.Load, ast.Store, ast.Del])
+
+
 def generate_attribute(ctx: Context) -> ast.Attribute:
     a = ast.Attribute()
     a.value = generate_expr(ctx)
     a.attr = make_name(ctx)
-    a.ctx = randchoice(ctx, [ast.Load, ast.Store, ast.Del])()
+    a.ctx = next(gen_cycle)()
     return a
+
+
+generate_subscript_ctx = cycle([ast.Load, ast.Store, ast.Del])
 
 
 def generate_subscript(ctx: Context) -> ast.Subscript:
@@ -202,7 +210,7 @@ def generate_subscript(ctx: Context) -> ast.Subscript:
         s.slice = generate_constant(ctx)  # TODO : Generate Tuple elts slice
     else:
         s.slice = generate_slice(ctx)
-    s.ctx = randchoice(ctx, [ast.Load, ast.Store, ast.Del])()
+    s.ctx = next(generate_subscript_ctx)()
     return s
 
 
@@ -219,6 +227,9 @@ def generate_assign(ctx: Context) -> ast.Assign:
     return asgn
 
 
+operators_cycle = cycle(OPERATORS)
+
+
 def generate_augassign(ctx: Context) -> ast.AugAssign:
     asgn = ast.AugAssign()
     asgn.lineno = 1
@@ -230,7 +241,7 @@ def generate_augassign(ctx: Context) -> ast.AugAssign:
         else:
             asgn.target = generate_subscript(ctx)
     asgn.value = generate_expr(ctx)
-    asgn.op = randchoice(ctx, OPERATORS)()
+    asgn.op = next(operators_cycle)()
     return asgn
 
 
@@ -292,12 +303,19 @@ def generate_name(ctx: Context, new: bool = False) -> ast.Name:
     return name
 
 
+constant_values_cycle = cycle([None, str(), bytes(), bool(), int(), float(), complex()])
+constant_values_with_ellipsis_cycle = cycle(
+    [None, str(), bytes(), bool(), int(), float(), complex(), Ellipsis]
+)
+
+
 def generate_constant(ctx: Context, values_only=False) -> ast.Constant:
     c = ast.Constant()
-    values = [None, str(), bytes(), bool(), int(), float(), complex()]
-    if not values_only:
-        values.append(Ellipsis)
-    c.value = randchoice(ctx, values)
+    c.value = next(
+        constant_values_cycle
+        if not values_only
+        else constant_values_with_ellipsis_cycle
+    )
     return c
 
 
@@ -429,8 +447,10 @@ def generate_expression(ctx: Context) -> ast.Expr:
     return e
 
 
-def generate_try(ctx: Context) -> ast.Try:
-    t = ast.Try()
+TTry = typing.TypeVar("TTry", ast.Try, ast.TryStar)
+
+
+def _generate_try(ctx: Context, t: TTry) -> TTry:
     t.lineno = 1
     t.body = generate_nested_stmts(ctx)
     t.handlers = []
@@ -451,6 +471,14 @@ def generate_try(ctx: Context) -> ast.Try:
     else:
         t.finalbody = []
     return t
+
+
+def generate_try(ctx: Context) -> ast.Try:
+    return _generate_try(ctx, ast.Try())
+
+
+def generate_trystar(ctx: Context) -> ast.TryStar:
+    return _generate_try(ctx, ast.TryStar())
 
 
 def generate_literal_pattern(ctx: Context) -> ast.Constant:
@@ -488,9 +516,11 @@ CLOSED_PATTERNS = [
     # class_pattern
 ]
 
+closed_patterns_cycle = cycle(CLOSED_PATTERNS)
+
 
 def generate_closed_pattern(ctx: Context) -> typing.Union[ast.pattern, ast.Constant]:
-    return randchoice(ctx, CLOSED_PATTERNS)(ctx)
+    return next(closed_patterns_cycle)(ctx)
 
 
 def generate_matchvalue(ctx: Context) -> ast.MatchValue:
@@ -499,9 +529,12 @@ def generate_matchvalue(ctx: Context) -> ast.MatchValue:
     return m
 
 
+singleton_cycle = cycle([None, True, False])
+
+
 def generate_matchsingleton(ctx: Context) -> ast.MatchSingleton:
     m = ast.MatchSingleton()
-    m.value = randchoice(ctx, [None, True, False])
+    m.value = next(singleton_cycle)
     return m
 
 
@@ -517,16 +550,26 @@ MATCH_CONST_GENERATORS = [
     generate_matchsingleton,
 ]
 
+match_const_cycle = cycle(MATCH_CONST_GENERATORS)
+
 
 def generate_matchsequence(ctx: Context) -> ast.MatchSequence:
     m = ast.MatchSequence()
     m.patterns = [
-        randchoice(ctx, MATCH_CONST_GENERATORS)(ctx)
+        next(match_const_cycle)(ctx)
         for _ in range(randint(ctx, 1, 3))  # TODO: Vary length
     ]
     if randbool(ctx):
         m.patterns.append(generate_matchstar(ctx))
     return m
+
+
+mapping_generator_cycle = cycle(
+    [
+        generate_matchvalue,
+        generate_matchsingleton,
+    ]
+)
 
 
 def generate_matchmapping(ctx: Context) -> ast.MatchMapping:
@@ -538,15 +581,7 @@ def generate_matchmapping(ctx: Context) -> ast.MatchMapping:
             m.keys.append(
                 generate_constant(ctx, values_only=True)
             )  # TODO: Handle value_pattern tokens
-            m.patterns.append(
-                randchoice(
-                    ctx,
-                    [
-                        generate_matchvalue,
-                        generate_matchsingleton,
-                    ],
-                )(ctx)
-            )
+            m.patterns.append(next(mapping_generator_cycle)(ctx))
     if randbool(ctx):
         m.rest = make_name(ctx)
     return m
@@ -558,20 +593,20 @@ def generate_matchclass(ctx: Context) -> ast.MatchClass:
     m.patterns = []
     for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
         with ctx.nested():
-            m.patterns.append(randchoice(ctx, MATCH_CONST_GENERATORS)(ctx))
+            m.patterns.append(next(match_const_cycle)(ctx))
     m.kwd_attrs = []
     m.kwd_patterns = []
     for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
         with ctx.nested():
             m.kwd_attrs.append(make_name(ctx))
-            m.kwd_patterns.append(randchoice(ctx, MATCH_CONST_GENERATORS)(ctx))
+            m.kwd_patterns.append(next(match_const_cycle)(ctx))
     return m
 
 
 def generate_matchas(ctx: Context) -> ast.MatchAs:
     m = ast.MatchAs()
     if randbool(ctx):
-        m.pattern = randchoice(ctx, CLOSED_PATTERNS)(ctx)
+        m.pattern = next(closed_patterns_cycle)(ctx)
     if randbool(ctx):
         m.name = make_name(ctx, new=True)
     return m
@@ -581,7 +616,7 @@ def generate_matchor(ctx: Context) -> ast.MatchOr:
     m = ast.MatchOr()
     m.patterns = []
     for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
-        m.patterns.append(randchoice(ctx, CLOSED_PATTERNS)(ctx))
+        m.patterns.append(next(closed_patterns_cycle)(ctx))
     return m
 
 
@@ -595,6 +630,8 @@ MATCH_GENERATORS = [
     generate_matchas,
     generate_matchor,
 ]
+
+match_cycle = cycle(MATCH_GENERATORS)
 
 
 def generate_matchpattern(ctx: Context) -> ast.pattern:
@@ -611,7 +648,7 @@ def generate_matchpattern(ctx: Context) -> ast.pattern:
     | MatchAs(pattern? pattern, identifier? name)
     | MatchOr(pattern* patterns)
     """
-    return randchoice(ctx, MATCH_GENERATORS)(ctx)
+    return next(match_cycle)(ctx)
 
 
 def generate_match(ctx: Context) -> ast.Match:
@@ -646,7 +683,7 @@ STMT_GENERATORS = (
     (GeneratorConstraints.ANY, generate_match),
     (GeneratorConstraints.ANY, generate_raise),
     (GeneratorConstraints.ANY, generate_try),
-    # (GeneratorConstraints.ANY, generate_trystar), # TODO
+    (GeneratorConstraints.ANY, generate_trystar),
     (GeneratorConstraints.ANY, generate_assert),
     (GeneratorConstraints.ANY, generate_import),
     (GeneratorConstraints.ANY, generate_importfrom),
@@ -659,12 +696,14 @@ STMT_GENERATORS = (
     # (GeneratorConstraints.ANY, generate_ellipsis), # This causes chaos
 )
 
+list_ctx_cycle = cycle([ast.Load, ast.Store, ast.Del])
+
 
 def generate_list(ctx: Context) -> ast.List:
     l = ast.List()
     l.elts = generate_exprs(ctx)
     if randbool(ctx):
-        l.ctx = randchoice(ctx, [ast.Load, ast.Store, ast.Del])()
+        l.ctx = next(list_ctx_cycle)()
     return l
 
 
@@ -674,25 +713,34 @@ def generate_tuple(ctx: Context) -> ast.Tuple:
     return t
 
 
+bool_op_cycle = cycle([ast.And, ast.Or])
+
+
 def generate_boolop(ctx: Context) -> ast.BoolOp:
     b = ast.BoolOp()
     b.values = [generate_expr(ctx)]  # TODO Vary length
-    b.op = randchoice(ctx, [ast.And, ast.Or])()
+    b.op = next(bool_op_cycle)()
     return b
+
+
+binop_cycle = cycle(OPERATORS)
 
 
 def generate_binop(ctx: Context) -> ast.BinOp:
     b = ast.BinOp()
     b.left = generate_expr(ctx)
     b.right = generate_expr(ctx)
-    b.op = randchoice(ctx, OPERATORS)()
+    b.op = next(binop_cycle)()
     return b
+
+
+unary_cycle = cycle([ast.Invert, ast.Not, ast.UAdd, ast.USub])
 
 
 def generate_unaryop(ctx: Context) -> ast.UnaryOp:
     u = ast.UnaryOp()
     u.operand = generate_expr(ctx)
-    u.op = randchoice(ctx, [ast.Invert, ast.Not, ast.UAdd, ast.USub])()
+    u.op = next(unary_cycle)()
     return u
 
 
@@ -794,15 +842,18 @@ def generate_yieldfrom(ctx: Context) -> ast.YieldFrom:
     return y
 
 
+cmpop_cycle = cycle(CMPOPS)
+
+
 def generate_compare(ctx: Context) -> ast.Compare:
     c = ast.Compare()
     c.left = generate_expr(ctx)
-    c.comparators = []
-    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
-        c.comparators.append(generate_expr(ctx))
-    c.ops = []
-    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
-        c.ops.append(randchoice(ctx, CMPOPS)())
+    c.comparators = [
+        generate_expr(ctx) for _ in range(randint(ctx, 1, 3))
+    ]  # TODO: Use width or varied length
+    c.ops = [
+        next(cmpop_cycle)() for _ in range(randint(ctx, 1, 3))
+    ]  # TODO: Vary length
     return c
 
 
@@ -896,7 +947,7 @@ STMT_OUTSIDE_LOOP_GENERATORS = list(
         filter(lambda x: x[0] == GeneratorConstraints.ANY, STMT_GENERATORS),
     )
 )
-STMT_ALL_GENERATORS = list(map(lambda x: x[1], STMT_GENERATORS))
+STMT_ALL_GENERATORS_ITER = cycle(list(map(lambda x: x[1], STMT_GENERATORS)))
 
 
 def _generate_stmts(ctx: Context) -> list[ast.stmt]:
@@ -905,7 +956,7 @@ def _generate_stmts(ctx: Context) -> list[ast.stmt]:
         return [generate_pass(ctx)]
     # TODO : Filter out statements that can't be in loops or functions
     # TODO: Don't yield statement types that themselves have bodies when 1 away from the max_depth
-    return [randchoice(ctx, STMT_ALL_GENERATORS)(ctx) for _ in range(ctx.width)]
+    return [next(STMT_ALL_GENERATORS_ITER)(ctx) for _ in range(ctx.width)]
 
 
 def generate_nested_stmts(ctx: Context) -> list[ast.stmt]:
@@ -913,12 +964,16 @@ def generate_nested_stmts(ctx: Context) -> list[ast.stmt]:
         return _generate_stmts(ctx)
 
 
+flat_expr_generators_cycle = cycle(FLAT_EXPR_GENERATORS)
+expr_generators_cycle = cycle(EXPR_GENERATORS)
+
+
 def generate_expr(ctx: Context) -> ast.expr:
     with ctx.nested():
         if ctx.depth >= ctx.max_depth:
             logger.debug("Hit max depth")
-            return randchoice(ctx, FLAT_EXPR_GENERATORS)(ctx)
-        return randchoice(ctx, EXPR_GENERATORS)(ctx)
+            return next(flat_expr_generators_cycle)(ctx)
+        return next(expr_generators_cycle)(ctx)
 
 
 def generate_exprs(ctx: Context) -> list[ast.expr]:
