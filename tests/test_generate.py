@@ -431,3 +431,17 @@ def test_generate_joinedstr(ctx):
     assert joinedstr
     code = ast.unparse(joinedstr)
     assert compiles(code)
+
+
+def test_generate_attribute(ctx):
+    attribute = g.generate_attribute(ctx)
+    assert attribute
+    code = ast.unparse(attribute)
+    assert compiles(code)
+
+
+def test_generate_subscript(ctx):
+    subscript = g.generate_subscript(ctx)
+    assert subscript
+    code = ast.unparse(subscript)
+    assert compiles(code)

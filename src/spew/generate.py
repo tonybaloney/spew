@@ -155,15 +155,18 @@ def generate_asyncfunction(ctx: Context) -> ast.AsyncFunctionDef:
 def generate_class(ctx: Context) -> ast.ClassDef:
     c = ast.ClassDef()
     c.name = make_name(ctx, new=True)
-    c.bases = []  # TODO: Add bases
+    if randbool(ctx):  # 50/50 chance of no bases
+        c.bases = []
+    else:
+        c.bases = [generate_expr(ctx) for _ in range(randint(ctx, 0, 3))]
     c.keywords = []
     c.body = generate_nested_stmts(ctx)
-    if randbool(ctx):
+    if randbool(ctx):  # 50/50 chance of no decorator list
         c.decorator_list = []
     else:
         c.decorator_list = [
-            generate_expr(ctx) for _ in range(randint(ctx, 1, 3))
-        ]  # TODO: vary length
+            generate_expr(ctx) for _ in range(randint(ctx, 1, ctx.width))
+        ]
     c.lineno = 1
     return c
 
@@ -184,6 +187,25 @@ def generate_continue(ctx: Context) -> ast.Continue:
     return ast.Continue()
 
 
+def generate_attribute(ctx: Context) -> ast.Attribute:
+    a = ast.Attribute()
+    a.value = generate_expr(ctx)
+    a.attr = make_name(ctx)
+    a.ctx = randchoice(ctx, [ast.Load, ast.Store, ast.Del])()
+    return a
+
+
+def generate_subscript(ctx: Context) -> ast.Subscript:
+    s = ast.Subscript()
+    s.value = generate_expr(ctx)
+    if randbool(ctx):
+        s.slice = generate_constant(ctx)  # TODO : Generate Tuple elts slice
+    else:
+        s.slice = generate_slice(ctx)
+    s.ctx = randchoice(ctx, [ast.Load, ast.Store, ast.Del])()
+    return s
+
+
 def generate_assign(ctx: Context) -> ast.Assign:
     asgn = ast.Assign()
     asgn.lineno = 1
@@ -200,7 +222,13 @@ def generate_assign(ctx: Context) -> ast.Assign:
 def generate_augassign(ctx: Context) -> ast.AugAssign:
     asgn = ast.AugAssign()
     asgn.lineno = 1
-    asgn.target = generate_name(ctx, new=True)
+    if randbool(ctx):
+        asgn.target = generate_name(ctx, new=True)
+    else:
+        if randbool(ctx):
+            asgn.target = generate_attribute(ctx)
+        else:
+            asgn.target = generate_subscript(ctx)
     asgn.value = generate_expr(ctx)
     asgn.op = randchoice(ctx, OPERATORS)()
     return asgn
@@ -209,9 +237,24 @@ def generate_augassign(ctx: Context) -> ast.AugAssign:
 def generate_annassign(ctx: Context) -> ast.AnnAssign:
     asgn = ast.AnnAssign()
     asgn.lineno = 1
-    asgn.target = generate_name(ctx, new=True)
-    asgn.value = generate_expr(ctx)
-    asgn.simple = 1  # TODO : Work out what this is
+    if randbool(ctx):
+        asgn.target = generate_name(ctx, new=True)
+    else:
+        if randbool(ctx):
+            asgn.target = generate_attribute(ctx)
+        else:
+            asgn.target = generate_subscript(ctx)
+
+    # simple is a boolean integer set to True for a Name node in target
+    # that do not appear in between parenthesis and are hence pure names
+    # and not expressions.
+    if randbool(ctx):
+        asgn.simple = 1
+        asgn.value = generate_name(ctx)
+    else:
+        asgn.simple = 0
+        # value is a single optional node
+        asgn.value = generate_expr(ctx)
     asgn.annotation = generate_expr(ctx)
     return asgn
 
@@ -296,8 +339,10 @@ def generate_nonlocal(ctx: Context) -> ast.Nonlocal:
     return n
 
 
-def generate_for(ctx: Context) -> ast.For:
-    f = ast.For()
+TFor = typing.TypeVar("TFor", ast.For, ast.AsyncFor)
+
+
+def _generate_for(ctx: Context, f: TFor) -> TFor:
     # TODO : Set tuple or collection as target
     f.target = generate_name(ctx, new=True)  # Can be expr, but just doing name
     f.iter = generate_expr(ctx)
@@ -311,18 +356,12 @@ def generate_for(ctx: Context) -> ast.For:
     return f
 
 
+def generate_for(ctx: Context) -> ast.For:
+    return _generate_for(ctx, ast.For())
+
+
 def generate_asyncfor(ctx: Context) -> ast.AsyncFor:
-    f = ast.AsyncFor()
-    f.target = generate_name(ctx, new=True)
-    f.iter = generate_expr(ctx)
-    f.lineno = 1
-    with ctx.inloop():
-        f.body = generate_nested_stmts(ctx)
-    if randbool(ctx):
-        f.orelse = generate_nested_stmts(ctx)
-    else:
-        f.orelse = []
-    return f
+    return _generate_for(ctx, ast.AsyncFor())
 
 
 def generate_while(ctx: Context) -> ast.While:
@@ -350,8 +389,10 @@ def generate_if(ctx: Context) -> ast.If:
     return i
 
 
-def generate_with(ctx: Context) -> ast.With:
-    w = ast.With()
+TWith = typing.TypeVar("TWith", ast.With, ast.AsyncWith)
+
+
+def _generate_with(ctx: Context, w: TWith) -> TWith:
     w.lineno = 1
     w.items = []
     for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
@@ -364,22 +405,14 @@ def generate_with(ctx: Context) -> ast.With:
         w.items.append(withitem)
     w.body = generate_nested_stmts(ctx)
     return w
+
+
+def generate_with(ctx: Context) -> ast.With:
+    return _generate_with(ctx, ast.With())
 
 
 def generate_asyncwith(ctx: Context) -> ast.AsyncWith:
-    w = ast.AsyncWith()
-    w.lineno = 1
-    w.items = []
-    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
-        withitem = ast.withitem()
-        withitem.context_expr = generate_expr(ctx)
-        if randbool(ctx):
-            withitem.optional_vars = generate_name(
-                ctx, new=True
-            )  # TODO : Can be expr, but just doing name
-        w.items.append(withitem)
-    w.body = generate_nested_stmts(ctx)
-    return w
+    return _generate_with(ctx, ast.AsyncWith())
 
 
 def generate_assert(ctx: Context) -> ast.Assert:
@@ -805,9 +838,24 @@ def generate_joinedstr(ctx: Context) -> ast.JoinedStr:
     return j
 
 
+def generate_namedexpr(ctx: Context) -> ast.NamedExpr:
+    n = ast.NamedExpr()
+    n.target = generate_name(ctx, new=True)
+    n.value = generate_expr(ctx)
+    return n
+
+
+def generate_slice(ctx: Context) -> ast.Slice:
+    s = ast.Slice()
+    s.lower = generate_expr(ctx)
+    s.upper = generate_expr(ctx)
+    s.step = generate_expr(ctx)
+    return s
+
+
 EXPR_GENERATORS = (
     generate_boolop,
-    # generate_namedexpr,
+    generate_namedexpr,
     generate_binop,
     generate_unaryop,
     generate_lambda,
@@ -826,13 +874,12 @@ EXPR_GENERATORS = (
     generate_formattedvalue,
     generate_joinedstr,
     generate_constant,
-    # generate_attribute,
-    # generate_subscript,
+    generate_attribute,
+    generate_subscript,
     # generate_starred,
     generate_name,
     generate_list,
     generate_tuple,
-    # generate_slice,
 )
 
 """ Expressions that don't themselves contain expressions. """
