@@ -443,8 +443,10 @@ def generate_expression(ctx: Context) -> ast.Expr:
     e.value = generate_expr(ctx)
     return e
 
-
-TTry = typing.TypeVar("TTry", ast.Try, ast.TryStar)
+if sys.version_info < (3, 11):
+    TTry = typing.TypeVar("TTry", ast.Try)
+else:
+    TTry = typing.TypeVar("TTry", ast.Try, ast.TryStar)
 
 
 def _generate_try(ctx: Context, t: TTry) -> TTry:
@@ -872,7 +874,7 @@ def generate_call(ctx: Context) -> ast.Call:
 def generate_formattedvalue(ctx: Context) -> ast.FormattedValue:
     f = ast.FormattedValue()
     # Use generate_name when Python < 3.12
-    if sys.version() < (3, 12):
+    if sys.version_info < (3, 12):
         f.value = generate_name(ctx, new=True)
     else:
         f.value = generate_expr(ctx)

@@ -14,9 +14,10 @@ def ctx():
 
 def compiles(code: str):
     ast.parse(code)
-    with tempfile.NamedTemporaryFile("w", suffix=".py", delete_on_close=True) as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".py") as f:
         f.write(code)
-        return compileall.compile_file(f.name)
+        result = compileall.compile_file(f.name)
+    return result
 
 
 @pytest.mark.parametrize("depth", [1, 2, 3, 4, 5])
