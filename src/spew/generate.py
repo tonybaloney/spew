@@ -443,6 +443,7 @@ def generate_expression(ctx: Context) -> ast.Expr:
     e.value = generate_expr(ctx)
     return e
 
+
 if sys.version_info < (3, 11):
     TTry = typing.TypeVar("TTry", ast.Try)
 else:
@@ -664,34 +665,35 @@ def generate_match(ctx: Context) -> ast.Match:
     return m
 
 
+# Constraint, is nested, generator
 STMT_GENERATORS = (
-    (GeneratorConstraints.ANY, generate_assign),
-    (GeneratorConstraints.ANY, generate_augassign),
-    (GeneratorConstraints.ANY, generate_annassign),
-    (GeneratorConstraints.ANY, generate_function),
-    (GeneratorConstraints.ANY, generate_asyncfunction),
-    (GeneratorConstraints.ANY, generate_class),
-    (GeneratorConstraints.ANY, generate_return),
-    (GeneratorConstraints.ANY, generate_delete),
-    (GeneratorConstraints.ANY, generate_for),
-    (GeneratorConstraints.ANY, generate_asyncfor),
-    (GeneratorConstraints.ANY, generate_while),
-    (GeneratorConstraints.ANY, generate_if),
-    (GeneratorConstraints.ANY, generate_with),
-    (GeneratorConstraints.ANY, generate_asyncwith),
-    (GeneratorConstraints.ANY, generate_match),
-    (GeneratorConstraints.ANY, generate_raise),
-    (GeneratorConstraints.ANY, generate_try),
-    (GeneratorConstraints.ANY, generate_trystar),
-    (GeneratorConstraints.ANY, generate_assert),
-    (GeneratorConstraints.ANY, generate_import),
-    (GeneratorConstraints.ANY, generate_importfrom),
-    (GeneratorConstraints.ANY, generate_global),
-    (GeneratorConstraints.ONLY_IN_FUNCTIONS, generate_nonlocal),
-    (GeneratorConstraints.ANY, generate_expression),
-    (GeneratorConstraints.ANY, generate_pass),
-    (GeneratorConstraints.ONLY_IN_LOOPS, generate_break),
-    (GeneratorConstraints.ONLY_IN_LOOPS, generate_continue),
+    (GeneratorConstraints.ANY, False, generate_assign),
+    (GeneratorConstraints.ANY, False, generate_augassign),
+    (GeneratorConstraints.ANY, False, generate_annassign),
+    (GeneratorConstraints.ANY, True, generate_function),
+    (GeneratorConstraints.ANY, True, generate_asyncfunction),
+    (GeneratorConstraints.ANY, True, generate_class),
+    (GeneratorConstraints.ONLY_IN_FUNCTIONS, False, generate_return),
+    (GeneratorConstraints.ANY, False, generate_delete),
+    (GeneratorConstraints.ANY, True, generate_for),
+    (GeneratorConstraints.ANY, True, generate_asyncfor),
+    (GeneratorConstraints.ANY, True, generate_while),
+    (GeneratorConstraints.ANY, True, generate_if),
+    (GeneratorConstraints.ANY, True, generate_with),
+    (GeneratorConstraints.ANY, True, generate_asyncwith),
+    (GeneratorConstraints.ANY, True, generate_match),
+    (GeneratorConstraints.ANY, False, generate_raise),
+    (GeneratorConstraints.ANY, True, generate_try),
+    (GeneratorConstraints.ANY, True, generate_trystar),
+    (GeneratorConstraints.ANY, False, generate_assert),
+    (GeneratorConstraints.ANY, False, generate_import),
+    (GeneratorConstraints.ANY, False, generate_importfrom),
+    (GeneratorConstraints.ANY, False, generate_global),
+    (GeneratorConstraints.ONLY_IN_FUNCTIONS, False, generate_nonlocal),
+    (GeneratorConstraints.ANY, False, generate_expression),
+    (GeneratorConstraints.ANY, False, generate_pass),
+    (GeneratorConstraints.ONLY_IN_LOOPS, False, generate_break),
+    (GeneratorConstraints.ONLY_IN_LOOPS, False, generate_continue),
     # (GeneratorConstraints.ANY, generate_ellipsis), # This causes chaos
 )
 
@@ -944,22 +946,26 @@ FLAT_EXPR_GENERATORS = [
 
 
 # Create another list with the first item in the tuple for each item in STMT_GENERATORS
-STMT_OUTSIDE_LOOP_GENERATORS = list(
-    map(
-        lambda x: x[1],
-        filter(lambda x: x[0] == GeneratorConstraints.ANY, STMT_GENERATORS),
-    )
-)
-STMT_ALL_GENERATORS_ITER = cycle(list(map(lambda x: x[1], STMT_GENERATORS)))
+STMT_ALL_GENERATORS_ITER = cycle(STMT_GENERATORS)
 
 
 def _generate_stmts(ctx: Context) -> list[ast.stmt]:
     if ctx.depth >= ctx.max_depth:
         logger.debug("Hit max depth for stmt")
         return [generate_pass(ctx)]
-    # TODO : Filter out statements that can't be in loops or functions
-    # TODO: Don't yield statement types that themselves have bodies when 1 away from the max_depth
-    return [next(STMT_ALL_GENERATORS_ITER)(ctx) for _ in range(ctx.width)]
+    stmts = []
+    while len(stmts) < ctx.width:
+        next_stmt = next(STMT_ALL_GENERATORS_ITER)
+        if next_stmt[1] and ctx.depth >= ctx.max_depth - 1:
+            logger.debug("Hit max depth for nested stmt")
+            continue
+        if next_stmt[0] == GeneratorConstraints.ANY:
+            stmts.append(next_stmt[2](ctx))
+        elif next_stmt[0] == GeneratorConstraints.ONLY_IN_FUNCTIONS and ctx.in_function:
+            stmts.append(next_stmt[2](ctx))
+        elif next_stmt[0] == GeneratorConstraints.ONLY_IN_LOOPS and ctx.in_loop:
+            stmts.append(next_stmt[2](ctx))
+    return stmts
 
 
 def generate_nested_stmts(ctx: Context) -> list[ast.stmt]:
