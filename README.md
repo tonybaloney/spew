@@ -35,3 +35,18 @@ func = g.generate_function(context) # returns an ast.FunctionDef object
 ```
 
 To generate AST objects back into Python code you can use the `ast.unparse()` function.
+
+The full list of command-line options:
+
+```default
+python -m spew --help
+usage: __main__.py [-h] [--depth DEPTH] [--width WIDTH] [--log-level LOG_LEVEL] [--output OUTPUT] [--check]
+
+options:
+  -h, --help            show this help message and exit
+  --depth DEPTH         Maximum depth (nesting) of the module
+  --width WIDTH
+  --log-level LOG_LEVEL
+  --output OUTPUT       Output file. If not specified, the output will be printed to the console.
+  --check               Check if the code is valid Python
+```
