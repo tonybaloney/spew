@@ -445,7 +445,7 @@ def generate_expression(ctx: Context) -> ast.Expr:
 
 
 if sys.version_info < (3, 11):
-    TTry = typing.TypeVar("TTry", ast.Try)
+    TTry = typing.TypeVar("TTry")
 else:
     TTry = typing.TypeVar("TTry", ast.Try, ast.TryStar)
 
