@@ -1,7 +1,6 @@
 import ast
 import sys
 from contextlib import contextmanager
-from itertools import cycle
 import random as _random
 import typing
 from spew.names import generate as make_name
@@ -48,6 +47,17 @@ CMPOPS = [
     ast.NotIn,
 ]
 
+TCycle = typing.TypeVar("TCycle")
+
+
+# Define a cycle that yields a random element in a list until it is exhausted then starts again
+def rcycle(l: typing.Iterable[TCycle]) -> typing.Generator[TCycle, None, None]:
+    while True:
+        items = list(l)
+        _random.shuffle(items)
+        for item in items:
+            yield item
+
 
 class Context:
     depth: int
@@ -90,7 +100,7 @@ def make_text(ctx: Context) -> str:
     return make_name(ctx, new=True)  # TODO : Do better
 
 
-boolcycle = cycle([True, False])
+boolcycle = rcycle([True, False])
 
 
 def randbool(ctx: Context) -> bool:
@@ -190,7 +200,7 @@ def generate_continue(ctx: Context) -> ast.Continue:
     return ast.Continue()
 
 
-gen_cycle = cycle([ast.Load, ast.Store, ast.Del])
+gen_cycle = rcycle([ast.Load, ast.Store, ast.Del])
 
 
 def generate_attribute(ctx: Context) -> ast.Attribute:
@@ -201,7 +211,7 @@ def generate_attribute(ctx: Context) -> ast.Attribute:
     return a
 
 
-generate_subscript_ctx = cycle([ast.Load, ast.Store, ast.Del])
+generate_subscript_ctx = rcycle([ast.Load, ast.Store, ast.Del])
 
 
 def generate_subscript(ctx: Context) -> ast.Subscript:
@@ -228,7 +238,7 @@ def generate_assign(ctx: Context) -> ast.Assign:
     return asgn
 
 
-operators_cycle = cycle(OPERATORS)
+operators_cycle = rcycle(OPERATORS)
 
 
 def generate_augassign(ctx: Context) -> ast.AugAssign:
@@ -304,8 +314,10 @@ def generate_name(ctx: Context, new: bool = False) -> ast.Name:
     return name
 
 
-constant_values_cycle = cycle([None, str(), bytes(), bool(), int(), float(), complex()])
-constant_values_with_ellipsis_cycle = cycle(
+constant_values_cycle = rcycle(
+    [None, str(), bytes(), bool(), int(), float(), complex()]
+)
+constant_values_with_ellipsis_cycle = rcycle(
     [None, str(), bytes(), bool(), int(), float(), complex(), Ellipsis]
 )
 
@@ -516,7 +528,7 @@ CLOSED_PATTERNS = [
     # class_pattern
 ]
 
-closed_patterns_cycle = cycle(CLOSED_PATTERNS)
+closed_patterns_cycle = rcycle(CLOSED_PATTERNS)
 
 
 def generate_closed_pattern(ctx: Context) -> typing.Union[ast.pattern, ast.Constant]:
@@ -529,7 +541,7 @@ def generate_matchvalue(ctx: Context) -> ast.MatchValue:
     return m
 
 
-singleton_cycle = cycle([None, True, False])
+singleton_cycle = rcycle([None, True, False])
 
 
 def generate_matchsingleton(ctx: Context) -> ast.MatchSingleton:
@@ -550,7 +562,7 @@ MATCH_CONST_GENERATORS = [
     generate_matchsingleton,
 ]
 
-match_const_cycle = cycle(MATCH_CONST_GENERATORS)
+match_const_cycle = rcycle(MATCH_CONST_GENERATORS)
 
 
 def generate_matchsequence(ctx: Context) -> ast.MatchSequence:
@@ -564,7 +576,7 @@ def generate_matchsequence(ctx: Context) -> ast.MatchSequence:
     return m
 
 
-mapping_generator_cycle = cycle(
+mapping_generator_cycle = rcycle(
     [
         generate_matchvalue,
         generate_matchsingleton,
@@ -631,7 +643,7 @@ MATCH_GENERATORS = [
     generate_matchor,
 ]
 
-match_cycle = cycle(MATCH_GENERATORS)
+match_cycle = rcycle(MATCH_GENERATORS)
 
 
 def generate_matchpattern(ctx: Context) -> ast.pattern:
@@ -697,7 +709,7 @@ STMT_GENERATORS = (
     # (GeneratorConstraints.ANY, generate_ellipsis), # This causes chaos
 )
 
-list_ctx_cycle = cycle([ast.Load, ast.Store, ast.Del])
+list_ctx_cycle = rcycle([ast.Load, ast.Store, ast.Del])
 
 
 def generate_list(ctx: Context) -> ast.List:
@@ -714,7 +726,7 @@ def generate_tuple(ctx: Context) -> ast.Tuple:
     return t
 
 
-bool_op_cycle = cycle([ast.And, ast.Or])
+bool_op_cycle = rcycle([ast.And, ast.Or])
 
 
 def generate_boolop(ctx: Context) -> ast.BoolOp:
@@ -724,7 +736,7 @@ def generate_boolop(ctx: Context) -> ast.BoolOp:
     return b
 
 
-binop_cycle = cycle(OPERATORS)
+binop_cycle = rcycle(OPERATORS)
 
 
 def generate_binop(ctx: Context) -> ast.BinOp:
@@ -735,7 +747,7 @@ def generate_binop(ctx: Context) -> ast.BinOp:
     return b
 
 
-unary_cycle = cycle([ast.Invert, ast.Not, ast.UAdd, ast.USub])
+unary_cycle = rcycle([ast.Invert, ast.Not, ast.UAdd, ast.USub])
 
 
 def generate_unaryop(ctx: Context) -> ast.UnaryOp:
@@ -843,7 +855,7 @@ def generate_yieldfrom(ctx: Context) -> ast.YieldFrom:
     return y
 
 
-cmpop_cycle = cycle(CMPOPS)
+cmpop_cycle = rcycle(CMPOPS)
 
 
 def generate_compare(ctx: Context) -> ast.Compare:
@@ -946,7 +958,7 @@ FLAT_EXPR_GENERATORS = [
 
 
 # Create another list with the first item in the tuple for each item in STMT_GENERATORS
-STMT_ALL_GENERATORS_ITER = cycle(STMT_GENERATORS)
+STMT_ALL_GENERATORS_ITER = rcycle(STMT_GENERATORS)
 
 
 def _generate_stmts(ctx: Context) -> list[ast.stmt]:
@@ -973,8 +985,8 @@ def generate_nested_stmts(ctx: Context) -> list[ast.stmt]:
         return _generate_stmts(ctx)
 
 
-flat_expr_generators_cycle = cycle(FLAT_EXPR_GENERATORS)
-expr_generators_cycle = cycle(EXPR_GENERATORS)
+flat_expr_generators_cycle = rcycle(FLAT_EXPR_GENERATORS)
+expr_generators_cycle = rcycle(EXPR_GENERATORS)
 
 
 def generate_expr(ctx: Context) -> ast.expr:
