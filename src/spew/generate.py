@@ -1,4 +1,5 @@
 import ast
+import sys
 from contextlib import contextmanager
 from itertools import cycle
 import random as _random
@@ -870,7 +871,11 @@ def generate_call(ctx: Context) -> ast.Call:
 
 def generate_formattedvalue(ctx: Context) -> ast.FormattedValue:
     f = ast.FormattedValue()
-    f.value = generate_name(ctx)
+    # Use generate_name when Python < 3.12
+    if sys.version() < (3, 12):
+        f.value = generate_name(ctx, new=True)
+    else:
+        f.value = generate_expr(ctx)
     f.format_spec = None  # TODO : Generate format specs
     f.conversion = -1  # TODO : Work out what this is?
     return f
