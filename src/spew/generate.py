@@ -479,8 +479,15 @@ def generate_try(ctx: Context) -> ast.Try:
     return _generate_try(ctx, ast.Try())
 
 
-def generate_trystar(ctx: Context) -> ast.TryStar:
-    return _generate_try(ctx, ast.TryStar())
+if sys.version_info > (3, 10):
+
+    def generate_trystar(ctx: Context) -> ast.TryStar:
+        return _generate_try(ctx, ast.TryStar())
+
+else:
+
+    def generate_trystar(ctx: Context) -> ast.Try:
+        return _generate_try(ctx, ast.Try())
 
 
 def generate_literal_pattern(ctx: Context) -> ast.Constant:
