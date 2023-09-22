@@ -1,11 +1,12 @@
 import ast
+import random as _random
 import sys
 from contextlib import contextmanager
-import random as _random
 import typing
 from spew.names import generate as make_name
 import logging
 import enum
+from spew.randomcycle import rcycle
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,17 +47,6 @@ CMPOPS = [
     ast.In,
     ast.NotIn,
 ]
-
-TCycle = typing.TypeVar("TCycle")
-
-
-# Define a cycle that yields a random element in a list until it is exhausted then starts again
-def rcycle(l: typing.Iterable[TCycle]) -> typing.Generator[TCycle, None, None]:
-    while True:
-        items = list(l)
-        _random.shuffle(items)
-        for item in items:
-            yield item
 
 
 class Context:
@@ -760,7 +750,7 @@ def generate_unaryop(ctx: Context) -> ast.UnaryOp:
 def generate_lambda(ctx: Context) -> ast.Lambda:
     l = ast.Lambda()
     l.args = ast.arguments()
-    l.args.args = [generate_arg(ctx) for _ in range(randint(ctx, 0, 10))]
+    l.args.args = [generate_arg(ctx) for _ in range(randint(ctx, 0, ctx.width))]
     l.args.posonlyargs = []
     l.args.kwonlyargs = []
     l.args.defaults = []
@@ -874,12 +864,12 @@ def generate_call(ctx: Context) -> ast.Call:
     c = ast.Call()
     c.func = generate_expr(ctx)
     c.args = []
-    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+    for _ in range(randint(ctx, 0, ctx.width // 2)):
         c.args.append(generate_expr(ctx))
     c.keywords = []
-    for _ in range(randint(ctx, 1, 3)):  # TODO: Vary length
+    for _ in range(randint(ctx, 0, ctx.width // 2)):
         kw = ast.keyword()
-        kw.arg = make_name(ctx)
+        kw.arg = make_name(ctx, new=True)
         kw.value = generate_expr(ctx)
         c.keywords.append(kw)
     return c
